@@ -1,55 +1,20 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-import { Compile } from "typebox/compile";
 
 const DEFAULT_BASE_URL = "http://localhost:8080/v1";
 const PROPS_TIMEOUT_MS = 120_000;
 
-const ModelsResponseSchema = Type.Object({
-	data: Type.Optional(
-		Type.Array(
-			Type.Object({
-				id: Type.String(),
-				status: Type.Optional(
-					Type.Object({
-						value: Type.Optional(
-							Type.Union([
-								Type.Literal("unloaded"),
-								Type.Literal("loading"),
-								Type.Literal("loaded"),
-								Type.Literal("sleeping"),
-								Type.Literal("unknown"),
-							]),
-						),
-					}),
-				),
-				architecture: Type.Optional(
-					Type.Object({
-						input_modalities: Type.Optional(Type.Array(Type.String())),
-					}),
-				),
-				meta: Type.Optional(
-					Type.Object({
-						n_ctx: Type.Optional(Type.Number()),
-						n_params: Type.Optional(Type.Number()),
-					}),
-				),
-			}),
-		),
-	),
-});
+type ModelsResponse = {
+	data?: Array<{
+		id: string;
+		status?: { value?: string };
+		architecture?: { input_modalities?: string[] };
+		meta?: { n_ctx?: number };
+	}>;
+};
 
-const validateModelsResponse = Compile(ModelsResponseSchema);
-
-const PropsResponseSchema = Type.Object({
-	default_generation_settings: Type.Optional(
-		Type.Object({
-			n_ctx: Type.Optional(Type.Number()),
-		}),
-	),
-});
-
-const validatePropsResponse = Compile(PropsResponseSchema);
+type PropsResponse = {
+	default_generation_settings?: { n_ctx?: number };
+};
 
 type LlamaModel = NonNullable<Parameters<ExtensionAPI["registerProvider"]>[1]["models"]>[number];
 type ExtensionCtx = Parameters<Parameters<ExtensionAPI["on"]>[1]>[1];
@@ -83,14 +48,7 @@ export default async function (pi: ExtensionAPI) {
 				return;
 			}
 
-			const payload: unknown = await response.json();
-			if (!validateModelsResponse.Check(payload)) {
-				const errors = [...validateModelsResponse.Errors(payload)]
-					.map((e) => `${"path" in e ? e.path : ""} ${e.message}`)
-					.join("; ");
-				console.warn(`[llama-cpp] invalid /models response: ${errors}`);
-				return;
-			}
+			const payload = (await response.json()) as ModelsResponse;
 
 			const previousById = new Map(currentModels.map((m) => [m.id, m]));
 
@@ -157,14 +115,7 @@ export default async function (pi: ExtensionAPI) {
 				ctx.ui.notify(`[llama-cpp] /props for ${modelId} returned ${response.status}`, "error");
 				return;
 			}
-			const data: unknown = await response.json();
-			if (!validatePropsResponse.Check(data)) {
-				const errors = [...validatePropsResponse.Errors(data)]
-					.map((e) => `${"path" in e ? e.path : ""} ${e.message}`)
-					.join("; ");
-				ctx.ui.notify(`[llama-cpp] invalid /props response for ${modelId}: ${errors}`, "error");
-				return;
-			}
+			const data = (await response.json()) as PropsResponse;
 			const nCtx = data.default_generation_settings?.n_ctx;
 			if (typeof nCtx === "number" && nCtx > 0) {
 				model.contextWindow = nCtx;
