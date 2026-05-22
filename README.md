@@ -8,7 +8,7 @@ registers them as the `llama-cpp` provider in pi.
 **From the shell:**
 
 ```bash
-pi install github.com/huggingface/pi-llama
+pi install https://github.com/huggingface/pi-llama
 ```
 
 This clones to `~/.pi/agent/packages/pi-llama/` and adds an entry to your pi
